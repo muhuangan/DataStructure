@@ -42,7 +42,6 @@ sudo pacman cmake  //提供构建工具
 sudo pacman vscode //代码编写、调试、提供交叉编译工具、下载到soc
 paru -S stm32cubemx //图形化配置引脚功能
 paru -S archlinux-java-run //为stm32cubemx提供运行环境
-
 ```
 
 使用任意方式下载serial port assistant，获得串口调试功能，执行命令`sudo usermod -a -G uucp $USER`获得串口访问权限，您可能需要重启以使该设置生效
