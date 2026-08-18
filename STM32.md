@@ -644,4 +644,17 @@ $$\text{CCR} = \text{duty} \times (\text{ARR} + 1)$$
 4. 计算CCR应有的值
 5. 将结果写入CCR
 
-代码如下
+代码如下:
+
+```C
+HAL_TIM_PWM_Start(&htim1, TIM_CHANNEL_1);
+HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
+uint16_t arr = __HAL_TIM_GET_AUTORELOAD(&htim1);
+
+while (1){
+    float t = HAL_GetTick() * 0.001;
+    float duty = 0.5 * sin(2*3.14*t) + 0.5;
+    uint16_t ccr = duty * (arr + 1);
+    __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, ccr);
+}
+```
