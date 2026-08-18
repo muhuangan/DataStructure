@@ -23,7 +23,15 @@
 * [6. SPI](#6-spi)
     * [6.1 总线结构](#61-总线结构)
     * [6.2 SPI的5个参数](#62-spi的5个参数)
-    * [6.3 按钮实验](#63-按钮实验)
+* [7. 中断](#7-中断)
+    * [7.1 中断的概念](#71-中断的概念)
+    * [7.2 中断优先级](#72-中断优先级)
+    * [7.3 串口中断接收实验！](#73-串口中断接收实验)
+* [8. 定时器](#8-定时器)
+    * [8.1 时基单元](#81-时基单元)
+    * [8.2 自制延迟函数！](#82-自制延迟函数)
+    * [8.3 输出比较](#83-输出比较)
+    * [8.4 呼吸灯实验！](#84-呼吸灯实验)
 
 <!-- toc-end -->
 
@@ -350,7 +358,7 @@ while (1)
 ```
 
 3. 将代码烧录进板子，观察到板载led以一个较慢的速度进行闪烁
-4. 在system_core/high speed clock(HSE)中，将值调整为crystal/ceramic resonator
+4. 在system_core/RCC/high speed clock(HSE)中，将值调整为crystal/ceramic resonator
 5. 在clock configuration中让pll选择hse作为来源，倍频器选择9倍，sysclk来源选择pll，ahb分频选择/1，apb1分频选择/2，apb2分频选择/1
 6. 保证HCLK为72MHz，PCLK1为36MHz，PCLK2为72MHz
 7. 将代码烧录进板子，观察到板载led以一个较快的速度进行闪烁
@@ -377,42 +385,263 @@ while (1)
 4种时钟模式  
 ![4种时钟模式](./resouces/4种时钟模式.png)
 
-## 6.3 按钮实验
+# 7. 中断
 
-本次实验的目的是每按一次按钮就切换一遍板载led的状态
+## 7.1 中断的概念
 
-实验步骤：
+当突发事件发生时暂时离开正在做的事去处理突发事件，处理完成之后再返回来处理原本正在进行的事件  
+![中断基本概念](./resouces/中断基本概念.png)
 
-1. 新建项目，配置debug为serial wire
-2. 配置pa0为gpio_input，PC13设置为开漏输出，初始电平为高电平，pa0设置为输入上拉
-3. 写入如下代码：
+中断让我们可以更加迅速地响应突发事件
+
+## 7.2 中断优先级
+
+1. 中断优先级分组  
+   使用4bit数表示中断优先级，数字越小，中断优先级越高  
+   4bit的左边部分叫**抢占优先级**，与中断嵌套和中断排队有关，右边部分叫**子优先级**，与中断排队有关  
+   ![中断优先级](./resouces/中断优先级.png)  
+   ![中断优先级分组](./resouces/中断优先级分组.png)
+
+2. 中断排队
+    - 优先级越高，排队越靠前
+    - 优先级相同时，遵循先来后到的原则
+
+3. 中断嵌套  
+   在执行一个中断响应函数过程中去执行另一个中断响应函数
+
+## 7.3 串口中断接收实验！
+
+实验目的：通过串口发送不同的数据控制板载led闪灯的频率
+
+1. 创建工程，选择debug模式为serial wire
+2. 配置pc13为开漏输出，初始电平为高电平
+3. 打开usart1，同时勾选nvic settings中的add，打开全局中断
+4. 定义私有变量`blinkInterval`用来记录led闪灯间隔，dataRcvd作为接收缓冲区
 
 ```C
-uint8_t pre = 1, cur = 1;
-uint8_t led_state = 0;
+static uint32_t blinkInterval = 1000;
+static uint8_t dataRcvd;
+```
 
-while (1)
-{
-  pre = cur;
-  if (HAL_GPIO_ReadPin(GPIOA, GPIO_PIN_0) == GPIO_PIN_SET) {
-    cur = 1;
-  }
-  else {
-    cur = 0;
-  }
+5. 定义回调函数
 
-  if (pre != cur) {
-    HAL_Delay(10);
-    if (cur == 1) {
-      if (led_state == 1) {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
-        led_state = 0;
-      }
-      else {
-        HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
-        led_state = 1;
-      }
+```C
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart){
+  if (huart == &huart1) {
+    if (dataRcvd == '1') {
+      blinkInterval = 1000;
     }
+    else if (dataRcvd == '2') {
+      blinkInterval = 300;
+    }
+    else if (dataRcvd == '3') {
+      blinkInterval = 50;
+    }
+
+    HAL_UART_Receive_IT(&huart1, &dataRcvd, 1);
   }
 }
 ```
+
+6. 写入main函数
+
+```C
+int main(void)
+{
+
+  HAL_Init();
+
+  SystemClock_Config();
+
+  MX_GPIO_Init();
+  MX_USART1_UART_Init();
+  HAL_UART_Receive_IT(&huart1, &dataRcvd, 1);
+
+  while (1)
+  {
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+
+    HAL_Delay(blinkInterval);
+
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+
+    HAL_Delay(blinkInterval);
+
+  }
+}
+```
+
+# 8. 定时器
+
+时钟树为定时器提供时钟信号，定时器执行和时间相关的操作
+
+## 8.1 时基单元
+
+时基单元结构图：  
+![时基单元结构图](./resouces/时基单元结构.png)
+
+> PSC - Prescaler - 预分频器  
+> CNT - Counter - 计数器  
+> ARR - Auto Reload Register - 自动重装寄存器  
+> RCR - Repetition Counter Register - 重复计数器
+
+1. 时钟来源：
+    1. 来自RCC(时钟树)  
+       ![rcc提供时钟](./resouces/rcc提供时钟.png)  
+       如果APB分频器的分频倍数为/1，则倍频器倍数为x1，如分频器的分频倍数为其他，则倍频器倍数为x2
+    2. 来自从模式控制器的触发信号(TRIG)
+    3. 来自外部参考信号(ETRF)
+2. 预分频器：  
+   由于时钟来源频率过高，所以我们需要通过预分频器降频才能正常使用，预分频器分频系数为PSC+1，PSC的取值范围是[0, 65535]
+3. ARR用来设置计时周期，取值范围是[0, 65535]
+4. CRT用来对脉冲进行计数，取值范围是[0, 65535]  
+   ![计数方式示意图](./resouces/计数方式示意图.png)
+   CRT计数方式：
+    1. 上计数：  
+       CRT从0开始增长直到和ARR的值相同，然后**溢出**，CRT又重新变为0不断循环  
+       定时周期ARR+1
+    2. 下计数  
+       CRT从ARR的值开始递减直到变为0，然后**溢出**，CRT又重新变成ARR的值  
+       定时周期ARR+1
+    3. 中心对齐  
+       CRT先从0递增到ARR又从ARR递减到0
+5. RCR：  
+   重复计数RCR + 1次，产生一次update事件，RCR的取值范围[0, 65535]
+
+STM32F1的四种定时器：  
+![STM32F1的四种定时器](./resouces/STM32F1的四种定时器.png)  
+只有高级定时器才有RCR
+
+存在两个寄存器：
+
+1. 影子寄存器
+2. 活动寄存器
+
+![寄存器预加载机制](./resouces/寄存器预加载机制.png)
+![寄存器预加载作用示例](./resouces/寄存器预加载作用示例.png)
+
+PSC和RCR的预加载机制是默认使能且无法关闭的，ARR的预加载机制是可手动开关且默认为关闭的，一般要手动使能
+
+## 8.2 自制延迟函数！
+
+实验目的：自己写一个和HAL_Delay近似的延时函数，可以利用定时器中断来实现
+
+1. TIM1 的Clock Source选择Internal Clock，选择时钟来源是内部时钟
+2. 保持时钟树为默认状态，即PCLK1和PCLK2为8MHz
+3. 在TIM1的Parameters settings中选择PSC为7，即预分频倍数为7倍，此时给到时基单元的脉冲频率为1MHz
+4. 设置ARR为999，RCR为0，这样update事件的频率就是1KHz，即每1ms触发一次update事件
+5. 配置pc13引脚为开漏输出，初始电平为高电平
+6. 打开TIM1的NVIC Settings，打开TIM1 update interrupt，开启update事件中断
+7. 写入如下代码，声明自定义函数
+
+```C
+static void MyDelay(uint32_t Delay);
+static uint32_t MyGetTick(void);
+```
+
+8. 定义变量记录当前是自第一次中断触发后第多少毫秒
+
+```C
+static volatile uint32_t currentMiliSecondes = 0;
+```
+
+9. 实现函数和中断回调函数
+
+```C
+static void MyDelay(uint32_t Delay){
+  uint32_t expireTime = MyGetTick() + Delay;
+  while (expireTime > MyGetTick()) {
+
+  }
+}
+
+static uint32_t MyGetTick(void){
+  return currentMiliSecondes;
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim){
+  if (htim == &htim1) {
+    currentMiliSecondes++;
+  }
+}
+```
+
+10. 编写主函数
+
+```C
+int main(void)
+{
+  SystemClock_Config();
+  MX_GPIO_Init();
+  MX_TIM1_Init();
+  HAL_TIM_Base_Start_IT(&htim1);
+  while (1)
+  {
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+
+    MyDelay(100);
+
+    HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+
+    MyDelay(100);
+  }
+}
+```
+
+11. 将代码烧录进板子，观察到板载led以一个较快的速度进行闪烁，同时通过更改MyDelay中的值可以更改led闪烁速度
+
+## 8.3 输出比较
+
+通过定时器输出精确定时的方波信号
+
+PWM(Pulse-Width Modulation)：脉冲宽度调制信号  
+占空比 = 高 / 周期 * 100%  
+PWM特点：周期恒定，占空比可调，用占空比调节信号的大小
+
+如何产生pwm波？  
+时基单元提供一个定时周期，每个输入捕获和输出比较通道都有一个CCR(Capture/Cpmpare Register 捕获/比较寄存器)，每当CNT的值<=CCR时，输出高电平，否则输出低电平
+
+> CCR的值决定了占空比
+
+输出比较模式选择  
+![输出比较模式](./resouces/输出比较模式.png)
+其中PWM1是最常用的模式
+
+输出模式：
+
+1. 正常输出
+2. 互补输出(经过反相器)
+
+## 8.4 呼吸灯实验！
+
+实验目标：使一颗led灯以呼吸灯的形式进行闪烁
+
+1. 新建一个工程
+2. 保证pclk2频率为8MHz
+3. 在Timers里面选择TIM1，选择clock sourcer为internal clock，设置prescaler为7，counter mode为up向上计数，设置ARR为999，开启auto-load preload
+4. 在channel1选择PWM generation CH1 CH1N  
+   ![pwm通道选择](./resouces/timer通道选择.png)
+5. 给pa8引脚连接一颗led，给pa7引脚连接另一颗led，均为推挽接法
+6. 设置参数，mode设置为PWM mode1，pulse设置为0表示CCR为0，占空比为0
+7. 开启arr的预加载
+8. ch polarity和chn polarity都选择high表示正极性
+9. 生成代码
+
+pwm函数编程接口  
+![pwm函数编程接口](./resouces/pwm函数编程接口.png)
+
+要想实现呼吸灯，我们希望的是让亮度 $=0.5\sin(2\pi t) + 0.5$  
+然后用pwm占空比替代亮度
+$$\text{duty} = \frac{T_{\text{High}}}{T} = \frac{\text{CCR}}{\text{ARR} + 1}$$
+所以  
+$$\text{CCR} = \text{duty} \times (\text{ARR} + 1)$$
+
+所以我们要做的事情如下：
+
+1. 获取当前时间
+2. 根据亮度函数计算出当前占空比
+3. 获取ARR的值
+4. 计算CCR应有的值
+5. 将结果写入CCR
+
+代码如下
