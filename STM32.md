@@ -32,6 +32,7 @@
     * [8.2 自制延迟函数！](#82-自制延迟函数)
     * [8.3 输出比较](#83-输出比较)
     * [8.4 呼吸灯实验！](#84-呼吸灯实验)
+    * [8.5 输入捕获](#85-输入捕获)
 
 <!-- toc-end -->
 
@@ -46,8 +47,8 @@
 1. 软件包下载
 
 ```
-sudo pacman cmake  //提供构建工具
-sudo pacman vscode //代码编写、调试、提供交叉编译工具、下载到soc
+sudo pacman -S cmake  //提供构建工具
+sudo pacman -S vscode //代码编写、调试、提供交叉编译工具、下载到soc
 paru -S stm32cubemx //图形化配置引脚功能
 paru -S archlinux-java-run //为stm32cubemx提供运行环境
 ```
@@ -69,7 +70,7 @@ paru -S archlinux-java-run //为stm32cubemx提供运行环境
     VBAT引脚通常用来连接备用电池，NRST引脚用于芯片复位，BOOT0引脚用于控制芯片的启动模式
 
 2. 普通引脚分为GPIOA，GPIOB，GPIOC，GPIOD四组  
-   ![引脚序号](./resouces/引脚序号.png)
+   ![引脚序号](./resources/引脚序号.png)
 
 ## 2.2 IO复用和重映射
 
@@ -84,15 +85,15 @@ paru -S archlinux-java-run //为stm32cubemx提供运行环境
 GPIO(General Purpose Input Output)通用目的的输入输出
 
 四种输出模式：
-![4种输出模式](./resouces/4种输出模式.png)
+![4种输出模式](./resources/4种输出模式.png)
 
 1. 推挽 vs 开漏  
    推挽和开漏本质上是在控制mos管的关断上的逻辑区别  
    下图为连接引脚的两个mos管的连接方式
-   ![连接引脚的两个mos管](./resouces/连接引脚的两个mos管.png)
+   ![连接引脚的两个mos管](./resources/连接引脚的两个mos管.png)
 
     推挽的本质是mosfet交替导通，开漏的本质是上管恒断
-    ![推挽vs开漏](./resouces/推挽vs开漏.png)
+    ![推挽vs开漏](./resources/推挽vs开漏.png)
 
 2. 通用 vs 复用  
    通用：通过直接在引脚上写一或写零控制引脚上的高低电平  
@@ -101,7 +102,7 @@ GPIO(General Purpose Input Output)通用目的的输入输出
 ## 2.4 最大IO速度
 
 在理想状态下，1和0之间的转换应该是瞬时的，然而实际上却是从1缓慢降到0、从0缓慢升到1，我们将电压升高所需的时间叫作**上升时间**，电压下降所需的时间叫作**下降时间**，中间输出有效电平的时间称为**保持时间**  
-![上升时间vs下降时间vs保持时间](./resouces/上升时间vs下降时间vs保持时间.png)
+![上升时间vs下降时间vs保持时间](./resources/上升时间vs下降时间vs保持时间.png)
 
 不难看出随着高低电平的切换速度逐渐加快，保持时间会越来越短，最终直到上升沿和下降沿完全重合
 
@@ -148,10 +149,10 @@ while (1){
 ## 2.6 四种输入模式
 
 输入上拉，输入下拉，输入浮空，模拟模式  
-![4种输入模式](./resouces/4种输入模式.png)
+![4种输入模式](./resources/4种输入模式.png)
 
 上下拉电阻作用如下  
-![上下拉电阻](./resouces/上下拉电阻.png)
+![上下拉电阻](./resources/上下拉电阻.png)
 
 ## 2.7 按钮实验！
 
@@ -179,20 +180,20 @@ while (1){
 
 1. UART定义与接线  
    UART，即串口，是一种通信接口，由两条线组成，Tx和Rx，其中Tx(Transmit)用于发送数据，Rx(Receive)用于接收数据  
-   ![串口接线方法](./resouces/串口接线.png)  
+   ![串口接线方法](./resources/串口接线.png)  
    两个设备的Tx和Rx应交错连接
 2. 串口的数据帧格式  
-   ![串口数据帧格式](./resouces/串口数据帧.png)
+   ![串口数据帧格式](./resources/串口数据帧.png)
 3. 校验位  
    奇校验：要求数据中包含奇数个1  
    欧校验：要求数据中包含偶数个1
-   ![奇校验与偶校验](./resouces/奇校验与偶校验.png)
+   ![奇校验与偶校验](./resources/奇校验与偶校验.png)
 4. 波特率  
    每秒钟传输位的数量  
-   ![波特率](./resouces/波特率.png)  
+   ![波特率](./resources/波特率.png)  
    收发双方应选择相同的波特率
 5. UART vs USART  
-   ![UARTvsUSART](./resouces/UARTvsUSART.png)
+   ![UARTvsUSART](./resources/UARTvsUSART.png)
 
 ## 3.2 使用串口简单地发送数据！
 
@@ -222,12 +223,12 @@ HAL_UART_Transmit(&huart1, (uint8_t*)str, strlen(str), HAL_MAX_DELAY);
 8. 开始调试、观察输出
 
 **单片机数据类型**
-![单片机数据类型](./resouces/单片机数据结构.png)
+![单片机数据类型](./resources/单片机数据结构.png)
 
 **串口发送数据接口**  
-![串口发送接口](./resouces/串口发送接口.png)  
+![串口发送接口](./resources/串口发送接口.png)  
 **各参数作用**
-![串口发送接口参数作用](./resouces/串口发送接口参数作用.png)
+![串口发送接口参数作用](./resources/串口发送接口参数作用.png)
 
 ## 3.3 使用串口简单接收数据！
 
@@ -278,7 +279,7 @@ I2C通信过程：
 4. 停止位：在SCL是高电压时，向SDA发送上升沿
 
 I2C模式：  
-![I2C模式](./resouces/I2C模式.png)
+![I2C模式](./resources/I2C模式.png)
 
 快速模式可以设置时钟信号的占空比：
 
@@ -319,7 +320,7 @@ else {
 ## 5.1 基础知识
 
 stm32单片机总线示意图：
-![总线示意图](./resouces/总线示意图.png)
+![总线示意图](./resources/总线示意图.png)
 
 数字逻辑电路：
 
@@ -327,7 +328,7 @@ stm32单片机总线示意图：
 2. 时序逻辑电路
 
 时钟分类  
-![时钟分类](./resouces/时钟分类.png)
+![时钟分类](./resources/时钟分类.png)
 
 > H-HighSpeed  
 > L-LowSpeed  
@@ -335,7 +336,7 @@ stm32单片机总线示意图：
 > I-Internal
 
 时钟树示意图：  
-![时钟树示意图](./resouces/时钟树示意图.png)
+![时钟树示意图](./resources/时钟树示意图.png)
 
 ## 5.2 时钟树配置实验！
 
@@ -383,14 +384,14 @@ while (1)
     2. 第二边沿采集
 
 4种时钟模式  
-![4种时钟模式](./resouces/4种时钟模式.png)
+![4种时钟模式](./resources/4种时钟模式.png)
 
 # 7. 中断
 
 ## 7.1 中断的概念
 
 当突发事件发生时暂时离开正在做的事去处理突发事件，处理完成之后再返回来处理原本正在进行的事件  
-![中断基本概念](./resouces/中断基本概念.png)
+![中断基本概念](./resources/中断基本概念.png)
 
 中断让我们可以更加迅速地响应突发事件
 
@@ -399,8 +400,8 @@ while (1)
 1. 中断优先级分组  
    使用4bit数表示中断优先级，数字越小，中断优先级越高  
    4bit的左边部分叫**抢占优先级**，与中断嵌套和中断排队有关，右边部分叫**子优先级**，与中断排队有关  
-   ![中断优先级](./resouces/中断优先级.png)  
-   ![中断优先级分组](./resouces/中断优先级分组.png)
+   ![中断优先级](./resources/中断优先级.png)  
+   ![中断优先级分组](./resources/中断优先级分组.png)
 
 2. 中断排队
     - 优先级越高，排队越靠前
@@ -478,7 +479,7 @@ int main(void)
 ## 8.1 时基单元
 
 时基单元结构图：  
-![时基单元结构图](./resouces/时基单元结构.png)
+![时基单元结构图](./resources/时基单元结构.png)
 
 > PSC - Prescaler - 预分频器  
 > CNT - Counter - 计数器  
@@ -487,7 +488,7 @@ int main(void)
 
 1. 时钟来源：
     1. 来自RCC(时钟树)  
-       ![rcc提供时钟](./resouces/rcc提供时钟.png)  
+       ![rcc提供时钟](./resources/rcc提供时钟.png)  
        如果APB分频器的分频倍数为/1，则倍频器倍数为x1，如分频器的分频倍数为其他，则倍频器倍数为x2
     2. 来自从模式控制器的触发信号(TRIG)
     3. 来自外部参考信号(ETRF)
@@ -495,7 +496,7 @@ int main(void)
    由于时钟来源频率过高，所以我们需要通过预分频器降频才能正常使用，预分频器分频系数为PSC+1，PSC的取值范围是[0, 65535]
 3. ARR用来设置计时周期，取值范围是[0, 65535]
 4. CRT用来对脉冲进行计数，取值范围是[0, 65535]  
-   ![计数方式示意图](./resouces/计数方式示意图.png)
+   ![计数方式示意图](./resources/计数方式示意图.png)
    CRT计数方式：
     1. 上计数：  
        CRT从0开始增长直到和ARR的值相同，然后**溢出**，CRT又重新变为0不断循环  
@@ -509,7 +510,7 @@ int main(void)
    重复计数RCR + 1次，产生一次update事件，RCR的取值范围[0, 65535]
 
 STM32F1的四种定时器：  
-![STM32F1的四种定时器](./resouces/STM32F1的四种定时器.png)  
+![STM32F1的四种定时器](./resources/STM32F1的四种定时器.png)  
 只有高级定时器才有RCR
 
 存在两个寄存器：
@@ -517,8 +518,8 @@ STM32F1的四种定时器：
 1. 影子寄存器
 2. 活动寄存器
 
-![寄存器预加载机制](./resouces/寄存器预加载机制.png)
-![寄存器预加载作用示例](./resouces/寄存器预加载作用示例.png)
+![寄存器预加载机制](./resources/寄存器预加载机制.png)
+![寄存器预加载作用示例](./resources/寄存器预加载作用示例.png)
 
 PSC和RCR的预加载机制是默认使能且无法关闭的，ARR的预加载机制是可手动开关且默认为关闭的，一般要手动使能
 
@@ -604,7 +605,7 @@ PWM特点：周期恒定，占空比可调，用占空比调节信号的大小
 > CCR的值决定了占空比
 
 输出比较模式选择  
-![输出比较模式](./resouces/输出比较模式.png)
+![输出比较模式](./resources/输出比较模式.png)
 其中PWM1是最常用的模式
 
 输出模式：
@@ -620,7 +621,7 @@ PWM特点：周期恒定，占空比可调，用占空比调节信号的大小
 2. 保证pclk2频率为8MHz
 3. 在Timers里面选择TIM1，选择clock sourcer为internal clock，设置prescaler为7，counter mode为up向上计数，设置ARR为999，开启auto-load preload
 4. 在channel1选择PWM generation CH1 CH1N  
-   ![pwm通道选择](./resouces/timer通道选择.png)
+   ![pwm通道选择](./resources/timer通道选择.png)
 5. 给pa8引脚连接一颗led，给pa7引脚连接另一颗led，均为推挽接法
 6. 设置参数，mode设置为PWM mode1，pulse设置为0表示CCR为0，占空比为0
 7. 开启arr的预加载
@@ -628,7 +629,7 @@ PWM特点：周期恒定，占空比可调，用占空比调节信号的大小
 9. 生成代码
 
 pwm函数编程接口  
-![pwm函数编程接口](./resouces/pwm函数编程接口.png)
+![pwm函数编程接口](./resources/pwm函数编程接口.png)
 
 要想实现呼吸灯，我们希望的是让亮度 $=0.5\sin(2\pi t) + 0.5$  
 然后用pwm占空比替代亮度
@@ -652,9 +653,34 @@ HAL_TIMEx_PWMN_Start(&htim1, TIM_CHANNEL_1);
 uint16_t arr = __HAL_TIM_GET_AUTORELOAD(&htim1);
 
 while (1){
-    float t = HAL_GetTick() * 0.001;
+    float t = HAL_GetTick() * 0.001;  //HAL_GetTick()返回的是ms，所以乘以0.001将单位转换成秒
     float duty = 0.5 * sin(2*3.14*t) + 0.5;
     uint16_t ccr = duty * (arr + 1);
     __HAL_TIM_SET_COMPARE(&htim1, TIM_CHANNEL_1, ccr);
 }
 ```
+
+## 8.5 输入捕获
+
+定时器通道作输入时可以对信号的时间参数进行测量，这种功能叫作：**输入捕获**
+
+每当检测到信号发生变化，cnt的值就会被保存到ccr中，然后我们读取ccr就能知道信号是在什么时间发生的变化
+
+输入捕获分为4个阶段：
+
+1. 输入滤波：滤出输入波形的毛刺、尖锋等，得到比较干净、纯粹的波形
+2. 边沿检测：
+    1. 上升沿脉冲：检测到输入波形有上升沿向外发送一个短脉冲
+    2. 下降沿脉冲：检测到输入波形有下降沿向外发送一个短脉冲
+3. 信号选择：
+    1. TRC(从从模式控制器来的信号)(暂不涉及)
+    2. 直接  
+       定时器的通道一与通道二是一对，通道三与通道四是一对，在一对之间，信号可以相互引用，如果通道来自于通道本身，则叫直接
+    3. 间接  
+       定时器的通道一与通道二是一对，通道三与通道四是一对，在一对之间，信号可以相互引用，如果通道来自于对侧通道，则叫间接
+4. 分频  
+   每分频系数个上升沿/下降沿输出一个脉冲  
+   每个脉冲会触发一个叫作ccx的事件，这个事件发生时会把cnt的值保存到ccr
+
+利用这个原理就能测得脉冲的脉宽  
+$\text{脉宽} = (\text{CCR2} - \text{CCR1}) \times \text{分辨率}$
