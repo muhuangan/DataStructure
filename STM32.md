@@ -1,9 +1,9 @@
 ---
-created_at: 2026-08-23
+created_at: 2026-06-22
 updated_at: 2026-08-23
 tags:
-    - 嵌入式
-    - STM32
+  - 嵌入式
+  - STM32
 archived: false
 ---
 
