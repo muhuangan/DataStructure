@@ -1,6 +1,6 @@
 ---
 created_at: 2026-06-22
-updated_at: 2026-08-23
+updated_at: 2026-08-25
 tags:
   - 嵌入式
   - STM32
@@ -42,6 +42,9 @@ archived: false
     * [8.3 输出比较](#83-输出比较)
     * [8.4 呼吸灯实验！](#84-呼吸灯实验)
     * [8.5 输入捕获](#85-输入捕获)
+    * [8.6 超声波测距！](#86-超声波测距)
+    * [8.7 从模式控制器(!? 难难 ?!)](#87-从模式控制器-难难-)
+    * [8.8 占空比测量！](#88-占空比测量)
 
 <!-- toc-end -->
 
@@ -55,7 +58,7 @@ archived: false
 
 1. 软件包下载
 
-```
+```bash
 sudo pacman -S cmake  //提供构建工具
 sudo pacman -S vscode //代码编写、调试、提供交叉编译工具、下载到soc
 paru -S stm32cubemx //图形化配置引脚功能
@@ -117,11 +120,11 @@ GPIO(General Purpose Input Output)通用目的的输入输出
 
 上升时间和下降时间限制了最大IO速度，上升时间和下降时间越短，最大输出速度就越大
 
-| 速度  | 上升时间  | 保持时间  | 下降时间  | 最大输出速度 |
-| --- | ----- | ----- | ----- | ------ |
-| 低速  | 125ns | 250ns | 125ns | 2MHz   |
-| 中速  | 25ns  | 50ns  | 25ns  | 10MHz  |
-| 高速  | 5ns   | 10ns  | 5ns   | 50MHz  |
+| 速度 | 上升时间 | 保持时间 | 下降时间 | 最大输出速度 |
+| ---- | -------- | -------- | -------- | ------------ |
+| 低速 | 125ns    | 250ns    | 125ns    | 2MHz         |
+| 中速 | 25ns     | 50ns     | 25ns     | 10MHz        |
+| 高速 | 5ns      | 10ns     | 5ns      | 50MHz        |
 
 运用时选取满足要求的最小值，因为过快的上升时间和下降时间会增大功耗，同时会更容易对电路板上的其他元器件产生干扰
 
@@ -688,3 +691,152 @@ while (1){
 
 利用这个原理就能测得脉冲的脉宽  
 $\text{脉宽} = (\text{CCR2} - \text{CCR1}) \times \text{分辨率}$
+
+## 8.6 超声波测距！
+
+**实验目的**：使用`HC-SR04`传感器检测前方是否有物体，有则点亮板载led，无则熄灭板载led
+
+HC-SR04引脚定义：
+
+| 引脚名称      | 引脚功能           |
+| ------------- | ------------------ |
+| Vcc           | 电源正极           |
+| GND           | 电源负极           |
+| Trig(Trigger) | 触发，用来启动测量 |
+| Echo          | 用来返回结果       |
+
+实验原理：
+
+1. 向Trig引脚施加一个>10us的脉冲
+2. 然后板子上写有T的一侧会开始发送超声波，超声波频率为40Hz，发送8个周期，即大约0.2ms
+3. 声波发送完成后，echo引脚会出现一个上升沿
+4. 当超声波接收完后，echo引脚会出现一个下降沿
+5. 此时测量脉宽就可以测得传播时间
+6. 利用公式 $距离 = \frac{声速 \times 传播时间}{2}$ 即可测得距离
+
+实验流程：
+
+1. vcc接3.3v
+2. gnd接gnd
+3. 随便找一个板子上的引脚(以PA0)为例，设置为推挽模式，默认选择低电压
+4. echo引脚连接系统板的定时器的通道一
+5. 通道一选择上升沿脉冲+直接
+6. 通道二选择下降沿脉冲+间接
+7. 将pc13设置为开漏输出，初始电压高电压
+8. 把定时器的分辨率设置为1us
+9. 假设时钟树的频率为8MHz，则预分频器PSC的值应该设置为7
+10. 定时器的时钟来源设置为内部时钟(Internal Clock)，把Counter Settings的值设置为7
+11. 已知echo引脚的脉宽最大值为38ms左右，要使得脉宽能落在一个定时周期内，则定时周期应大于38ms，注意到当ARR等于65535时，周期大于38ms，所以ARR选择65535
+12. 使能auto-reload preload
+13. 最终目的：检测传感器20cm内有没有障碍物，有就亮灯，没有就灭灯
+14. 写入以下代码
+
+```C
+int main(void){
+    while(1){
+        __HAL_TIM_SET_COUNTER(&htim1, 0); //向计数器写0
+        __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_CC1); //清除cc1标志位
+        __HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_CC2); //清除cc2标志位
+
+        HAL_TIM_IC_Start(&htim1, TIM_CHANNEL_1); //启动通道一输入捕获
+        HAL_TIM_IC_Start(&htim1, TIM_CHANNEL_2); //启动通道二输入捕获
+
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_SET); //向Trig发送脉冲
+
+        for(uint32_t i = 0; i < 10; i++); //延时10us
+
+        HAL_GPIO_WritePin(GPIOA, GPIO_PIN_0, GPIO_PIN_RESET);
+
+        //等待测量结束
+        uint8_t success = 0; //测量是否成功标志
+        uint32_t expireTime = HAL_GetTick() + 50;
+
+        while(expireTime > HAL_GetTick()){
+            uint32_t cc1Flag = __HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC1);
+            uint32_t cc2Flag = __HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC2);
+
+            if(cc1Flag && cc2Flag){
+                success = 1;
+                break;
+            }
+        }
+
+        HAL_TIM_IC_Stop(&htim1, TIM_CHANNEL_1);
+        HAL_TIM_IC_Stop(&htim1, TIM_CHANNEL_2);
+
+        if(success){
+            uint16_t ccr1 = __HAL_TIM_GET_COMPARE(&htim1, TIM_CHANNEL_1);
+            uint16_t ccr2 = __HAL_TIM_GET_COMPARE(&htim1, TIM_CHANNEL_2);
+
+            float pulseWidth = (ccr2 - ccr1) * 1e-6f;
+            float distance = 340.0f * pulseWidth / 2.0f;
+
+            if(distance < 0.2){
+                HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_RESET);
+            }
+            else{
+                HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, GPIO_PIN_SET);
+            }
+        }
+    }
+}
+```
+
+15. 烧录代码
+
+## 8.7 从模式控制器(!? 难难 ?!)
+
+![从模式控制器示意框图](./resources/从模式控制器示意图.png)
+
+从模式控制器的模式：
+
+| 作为从机                              | 作为主机                           |
+| ------------------------------------- | ---------------------------------- |
+| Slave Mode Disable - 从模式禁止       | Reset - 复位                       |
+| Encoder Mode 1 - 编码器模式1          | Enable - 使能                      |
+| Encoder Mode 2 - 编码器模式2          | Update - 更新                      |
+| Encoder Mode 3 - 编码器模式3          | Compare Pulse - 输出比较脉冲       |
+| Reset Mode - 复位模式                 | Compare OC1Ref - 输出比较参考信号1 |
+| Gated Mode - 门模式                   | Compare OC2Ref - 输出比较参考信号2 |
+| Trigger Mode - 触发模式               | Compare OC3Ref - 输出比较参考信号3 |
+| External Clock Mode 1 - 外部时钟模式1 | Compare OC4Ref - 输出比较参考信号4 |
+
+- 从机模式：
+    1. Slave Mode Disable - 从模式禁止：不使用从机功能
+    2. Reset Mode - 复位模式：使用TRGI的上升沿来复位CNT，同时产生Update事件
+    3. Reset Mode - 复位模式：使用TRGI控制时基单元的开关，高电平时时基单元导通，低电平时时基单元断开
+    4. Trigger Mode - 触发模式：使用TRGI的上升沿来启动定时器
+    5. External Clock Mode 1 - 把TRGI作为定时器的时钟
+- 主机模式：
+    1. Enable - 使能：通过TRGO把时基单元的开关状态输出出去
+    2. Update - 更新：每产生一个Update事件就向TRGO输出一个脉冲
+
+## 8.8 占空比测量！
+
+实验流程：
+
+1. 使用定时器3的通道1(PA6)产生被测PWM，用定时器1的通道1(PA8)测量PWM参数
+2. 增加一个led用来指示PWM占空比
+3. 增加串口将数据显示在电脑上
+4. 将debug模式调整为serial wire，toolchain调整为cmake
+5. 打开usart1，使用异步模式，波特率115200，8位数据位长度，1位停止位，不使用校验位
+6. 开启定时器3通道一，模式选择PWM Generation CH1，分频系数选择7，计数方式选择上计数，ARR选择999，使能预加载，打开内部时钟，这样就能产生一个周期为1ms的PWM波
+7. 在PWM Generation中Mode选择PWM Mode 1，Pulse选择200表示CCR为200，占空比为20%，极性选择正极性
+8. 生成代码
+9. 写入以下代码，开启PWM输出
+
+```C
+HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+```
+10. 通过TI1FP1捕捉上升沿，TI2FP2捕捉下降沿，并将TI1FP1的信号作为TRGI，将从模式控制器的模式设置为复位模式
+
+TRGI的来源：  
+1. TI1FP1
+2. TI2FP2
+
+TIxFPy:  
+- TI：Timer input - 定时器输入
+- x：从哪个通道来
+- F：filterd，经过滤波的
+- P：Polarized - 极性选择过的：要么选择捕捉上升沿，要么选择捕获下降沿
+- y：到哪个通道去
