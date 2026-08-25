@@ -2,8 +2,8 @@
 created_at: 2026-06-22
 updated_at: 2026-08-25
 tags:
-  - 嵌入式
-  - STM32
+    - 嵌入式
+    - STM32
 archived: false
 ---
 
@@ -828,13 +828,16 @@ int main(void){
 ```C
 HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
 ```
+
 10. 通过TI1FP1捕捉上升沿，TI2FP2捕捉下降沿，并将TI1FP1的信号作为TRGI，将从模式控制器的模式设置为复位模式
 
-TRGI的来源：  
+TRGI的来源：
+
 1. TI1FP1
 2. TI2FP2
 
-TIxFPy:  
+TIxFPy:
+
 - TI：Timer input - 定时器输入
 - x：从哪个通道来
 - F：filterd，经过滤波的
