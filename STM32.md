@@ -1,6 +1,6 @@
 ---
 created_at: 2026-06-22
-updated_at: 2026-08-25
+updated_at: 2026-09-02
 tags:
     - 嵌入式
     - STM32
@@ -45,12 +45,18 @@ archived: false
     * [8.6 超声波测距！](#86-超声波测距)
     * [8.7 从模式控制器(!? 难难 ?!)](#87-从模式控制器-难难-)
     * [8.8 占空比测量！](#88-占空比测量)
+    * [8.9 编码器实验！](#89-编码器实验)
+* [9. ADC](#9-adc)
+    * [9.1 逐次逼近型ADC](#91-逐次逼近型adc)
+    * [9.2 ADC模块的基本原理](#92-adc模块的基本原理)
+    * [9.3 采样时间和转换时间](#93-采样时间和转换时间)
+    * [9.4 单通道转换](#94-单通道转换)
 
 <!-- toc-end -->
 
 # 0. 前言
 
-本学习笔记是基于STM32F103C8T6的学习笔记，使用stm32cubemx和vscode基于cmake作为开发工具链，在archlinux上进行开发，使用stm32f103c8t6最小系统板作为开发板
+本学习笔记是基于STM32F103C8T6与hal库的学习笔记，使用stm32cubemx和vscode基于cmake作为开发工具链，在archlinux上进行开发，使用stm32f103c8t6最小系统板作为开发板
 
 本笔记主要参考这个[视频教程](https://www.bilibili.com/video/BV16J4m1w7HB?vd_source=c8cd7191b3d178cf10b977901b2d6df4&spm_id_from=333.788.videopod.sections)
 
@@ -60,7 +66,8 @@ archived: false
 
 ```bash
 sudo pacman -S cmake  //提供构建工具
-sudo pacman -S vscode //代码编写、调试、提供交叉编译工具、下载到soc
+sudo pacman -S stlink //提供下载和调试功能
+paru -S visual-studio-code-bin //下载vscode，提供代码编写、调试、提供交叉编译工具
 paru -S stm32cubemx //图形化配置引脚功能
 paru -S archlinux-java-run //为stm32cubemx提供运行环境
 ```
@@ -830,6 +837,47 @@ HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
 ```
 
 10. 通过TI1FP1捕捉上升沿，TI2FP2捕捉下降沿，并将TI1FP1的信号作为TRGI，将从模式控制器的模式设置为复位模式
+11. 选择定时器1，时钟来源选择internal clock内部时钟，将PSC的值设置为7，技术方向为上计数，ARR设置为65535，RCR设置为0，使能预加载，将通道一设置为输入捕获直接，通道二设置为输入捕获间接，通道一捕捉上升沿，通道二捕捉下降沿，将slave mode调整为reset mode，选择trigger source为TI1FP1
+12. 生成代码
+13. 此时遇到PWM的某一个上升沿时，CNT会清零，当遇到紧邻的下降沿时，CNT的值会保存到CCR2中，当遇到下一个上升沿时，CNT的值会保存的CCR1中，此时通过计算可得：
+    $\text{周期} = \text{CCR1} \times \text{分辨率}$
+    $\text{占空比} = \frac{\text{CCR2}}{\text{CCR1}} \times 100\%$
+14. 写入代码
+
+```C
+HAL_TIM_PWM_Start(&htim3, TIM_CHANNEL_1);
+
+while (1)
+{
+// 1. 清除CC1标志位
+__HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_CC1);
+
+// 2. 启动定时器(CH1和CH2的输入捕获)
+HAL_TIM_IC_Start(&htim1, TIM_CHANNEL_1);
+HAL_TIM_IC_Start(&htim1, TIM_CHANNEL_2);
+
+// 3. 等待CC1标志位(等待到了说明等到了第一个上升沿)
+while (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC1) == 0) {}
+
+// 4. 清零CCR1标志位
+__HAL_TIM_CLEAR_FLAG(&htim1, TIM_FLAG_CC1);
+
+// 5. 再次等待CC1标志位(等待到了说明等完了一整个周期)
+while (__HAL_TIM_GET_FLAG(&htim1, TIM_FLAG_CC1) == 0) {}
+
+// 6.关闭定时器
+HAL_TIM_IC_Stop(&htim1, TIM_CHANNEL_1);
+HAL_TIM_IC_Stop(&htim1, TIM_CHANNEL_2);
+
+// 7. 计算结果
+uint16_t ccr1 = __HAL_TIM_GET_COMPARE(&htim1, TIM_CHANNEL_1);
+uint16_t ccr2 = __HAL_TIM_GET_COMPARE(&htim1, TIM_CHANNEL_2);
+
+float period = ccr1 * 1e-6f;
+float pulseWidth = ccr2 * 1e-6f;
+float duty = pulseWidth / period;
+}
+```
 
 TRGI的来源：
 
@@ -843,3 +891,99 @@ TIxFPy:
 - F：filterd，经过滤波的
 - P：Polarized - 极性选择过的：要么选择捕捉上升沿，要么选择捕获下降沿
 - y：到哪个通道去
+
+## 8.9 编码器实验！
+
+以增量式AB编码器为例：
+![AB编码器引脚示意图](./resources/AB编码器引脚示意图.png)
+当旋转的时候，金属片会进行转动，AB所对应的触点与金属片之间会不断地接触和脱离
+
+当触点与金属片接触时，AB引脚通过金属片接地，所以输出低电压；当触点与金属片脱离时，AB引脚通过上拉电阻接VCC，所以输出高电压
+
+当金属片不断转动时，不难发现，AB引脚所连接的引脚将输出方波
+
+易得，当金属片是顺时针旋转时，A的波形略微领先于B，逆时针旋转时B的波形略微领先于A
+
+A的信号和B的信号会通过TI1FP1和TI2FP2输入到时基单元中，让CNT递增或递减
+
+- A相在前，B相在后：正转
+- B相在前，A相在后：反转
+
+| 编码器模式 | 功能            |
+| ---------- | --------------- |
+| 模式一     | 在A相的边沿计数 |
+| 模式二     | 在B相的边沿计数 |
+| 模式三     | 双边沿计数      |
+
+**实验流程**：
+
+1. 新建工程，选择工具链为cmake，开启debug为serial wire
+2. 点击Timers，选择定时器3，将Combined Channels的值选择为Encoder Mode，在下方的参数中将Encode Mode的值选择为Encoder Mode TI1表示选择模式一
+3. 将PSC的值设置为0，ARR的值设置为10
+4. 生成代码
+5. 写入以下代码：
+
+```C
+HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_1);
+HAL_TIM_Encoder_Start(&htim3, TIM_CHANNEL_2);
+
+while(1){
+    uint16_t cnt = __HAL_TIM_GET_COUNTER(&htim3);
+}
+```
+
+6. 此时通过调试就可以看到cnt的值的变化了
+
+# 9. ADC
+
+## 9.1 逐次逼近型ADC
+
+stm32f103c8t6有两个12位逐次逼近型ADC  
+**ADC**: analog[^1] to digital[^2] converter[^3]  
+**12位**: 指ADC的**采样深度**[^4]  
+**逐次逼近型**: 即从最高位开始尝试往当前位写1，如果结果大于要被转换的电压则将当前位写为0，然后对比自己低的一位尝试同样的操作，循环往复直到所有位结束
+
+[^1]: 模拟信号，指时间和幅度都连续的信号，一般存在于自然界
+
+[^2]: 数字信号，时间和幅度都离散的信号，一般用于计算机中
+
+[^3]: 转换器
+
+[^4]: 用多少位二进制数来表示一个采样点，比如说ADC能采样0-3.3V之间的电压，那么12位的采样深度就会把0-3.3V之间划分为$2^{12} - 1$份，这样通过数字就可以粗略地表示电压
+
+## 9.2 ADC模块的基本原理
+
+每一个ADC可以同时测量多路信号，通过采样开关控制每个信号是否被传输到ADC中，整个过程如下：
+
+1. 闭合当前路的采样开关
+2. 对ADC内的采样保持电容充电
+3. 断开采样开关
+4. 使用ADC进行模数转换
+5. 将数据保存到结果寄存器中
+6. 读取数据
+7. 切换当前路为下一路
+8. 回到第一步，直到全部测量完成
+
+对于STM32F103C8T6而言，每一个ADC可以采样测量12路信号，其中前10路通过IO引脚输入，另外两路一个是芯片内部的温度传感器，一个是芯片内部的参考电压
+
+ADC模块为计划如何进行转换设计了常规序列和注入序列，每当输入一个脉冲就会对序列中的通道进行依次转换
+
+## 9.3 采样时间和转换时间
+
+> 输入到ADC的时钟频率不能超过14MHz
+
+采样时间和装换时间我们一般要写成**时钟周期**乘以一个系数的形式
+
+**转换时间**: 对于STM32F103C8T6上的12位逐次逼近型而言，其转换周期为12.5个时钟周期  
+**采样时间**: 采样电容充满电的时间，采样时间越长，误差越小，但我们不能一直等下去，我们需要在效率和精度之间寻找一个平衡，因此我们引入了最佳采样时间
+
+$$T_s = (R_{AIN} + R_{ADC}) \cdot C_{ADC} \cdot \ln(2^{N+2})$$
+
+> $T_s$: 最佳采样时间  
+> $R_{AIN}$: 输入信号源内阻  
+> $R_{ADC}$: ADC采样保持电路中的电阻，在F103C8T6中值为$1k\Omega$  
+> $C_{ADC}$: 采样保持电路中的电容，在F103C8T6中值为$8pF$  
+> $N$: 采样深度，此处值为12
+
+不难看出，对于一颗确定的芯片内的ADC而言，其最佳采样时间是一个仅与输入信号源内阻有关的单变量函数，所以我们只需要选择与计算出的最佳采样时间最接近的挡位就可以了
+
